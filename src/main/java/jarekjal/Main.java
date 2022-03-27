@@ -60,12 +60,12 @@ public class Main {
         console.println();
 
         var ledConfig = DigitalOutput.newConfigBuilder(pi4j)
-                        .id("led")
-                        .name("LED Flasher")
-                        .address(PIN_LED)
-                        .shutdown(DigitalState.LOW)
-                        .initial(DigitalState.LOW)
-                        .provider("pigpio-digital-output");
+                .id("led")
+                .name("LED Flasher")
+                .address(PIN_LED)
+                .shutdown(DigitalState.LOW)
+                .initial(DigitalState.LOW)
+                .provider("pigpio-digital-output");
         var led = pi4j.create(ledConfig);
 
 
@@ -85,23 +85,27 @@ public class Main {
             }
         });
 
-        while (pressCount < 3){
-
-        }
+        while (true) {
 
 
-        int counter = 0;
-        while (counter < 100) {
-            if (led.equals(DigitalState.HIGH)) {
-                led.low();
-                System.out.println("counter: " + counter + ", low");
-            } else {
-                led.high();
-                System.out.println("counter: " + counter + ", high");
+            while (pressCount < 3) {
+
             }
-            Thread.sleep(500);
-            counter++;
+
+
+            int counter = 0;
+            while (counter < 5) {
+                if (led.equals(DigitalState.HIGH)) {
+                    led.low();
+                    System.out.println("counter: " + counter + ", low");
+                } else {
+                    led.high();
+                    System.out.println("counter: " + counter + ", high");
+                }
+                Thread.sleep(500);
+                counter++;
+            }
+            pressCount = 0;
         }
     }
-
 }
