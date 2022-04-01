@@ -7,13 +7,14 @@ package jarekjal;
 
 import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
-import com.pi4j.io.gpio.digital.DigitalInput;
-import com.pi4j.io.gpio.digital.DigitalOutput;
-import com.pi4j.io.gpio.digital.DigitalState;
-import com.pi4j.io.gpio.digital.PullResistance;
+import com.pi4j.io.gpio.digital.*;
 import com.pi4j.platform.Platforms;
 import com.pi4j.util.Console;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  *
@@ -22,19 +23,19 @@ import java.lang.reflect.InvocationTargetException;
 public class Main {
 
     private static final int PIN_LED = 21; // PIN ?? = BCM 21 (pin 15 = bcm 22)
-
     private static final int PIN_BUTTON = 24; // PIN 18 = BCM 24
-
-    private static int pressCount = 0;
-
 
     private static final Console console = new Console();
 
-    /**
-     * @param args the command line arguments
-     */
+    private static int turns = 10;
+    private static int pressCount = 0;
+    private static long startTime;
+    private static long elapsedTime;
+    private static final List<Long> times = new ArrayList<>();
+
+
     public static void main(String[] args) {
-        console.box("Hello Rasbian world !");
+        console.box("Gra czas reakcji...");
         Context pi4j = null;
         try {
             pi4j = Pi4J.newAutoContext();
@@ -52,23 +53,45 @@ public class Main {
     }
 
     private void run(Context pi4j) throws Exception {
-        Platforms platforms = pi4j.platforms();
+        describePlatform(pi4j);
 
-        console.box("Pi4J PLATFORMS");
-        console.println();
-        platforms.describe().print(System.out);
-        console.println();
-
-        var ledConfig = DigitalOutput.newConfigBuilder(pi4j)
-                .id("led")
-                .name("LED Flasher")
-                .address(PIN_LED)
-                .shutdown(DigitalState.LOW)
-                .initial(DigitalState.LOW)
-                .provider("pigpio-digital-output");
-        var led = pi4j.create(ledConfig);
+        DigitalOutput led = createLED(pi4j);
+        DigitalInput button = createButton(pi4j);
 
 
+        while (nextTurn()) {
+            console.println("* * *   " + pressCount + 1 + "   * * *");
+            CountDownLatch countDownLatch = new CountDownLatch(1);
+            DigitalStateChangeListener digitalStateChangeListener = e -> {
+                if (e.state() == DigitalState.LOW && led.state().equals(DigitalState.HIGH)) {
+                    elapsedTime = System.currentTimeMillis() - startTime;
+                    pressCount++;
+                    console.println("Guzik " + e.source() + " nacisniety " + pressCount + " razy");
+                    console.println("Czas reakcji: " + elapsedTime + " ms");
+                    times.add(elapsedTime);
+                    led.low();
+                    console.println("Dioda zgaszona");
+                    countDownLatch.countDown();
+                }
+            };
+            button.addListener(digitalStateChangeListener);
+            Thread.sleep(5000);
+            led.high();
+            console.println("Dioda zapalona");
+            startTime = System.currentTimeMillis();
+            countDownLatch.await();
+            button.removeListener(digitalStateChangeListener);
+        }
+        console.println("Koniec!");
+        console.println("Czasy: " + times);
+    }
+
+    private boolean nextTurn() {
+        turns--;
+        return turns >= 0;
+    }
+
+    private DigitalInput createButton(Context pi4j) {
         var buttonConfig = DigitalInput.newConfigBuilder(pi4j)
                 .id("button")
                 .name("Press button")
@@ -76,36 +99,25 @@ public class Main {
                 .pull(PullResistance.PULL_DOWN)
                 .debounce(3000L)
                 .provider("pigpio-digital-input");
-        var button = pi4j.create(buttonConfig);
+        return pi4j.create(buttonConfig);
+    }
 
-        button.addListener(e -> {
-            if (e.state() == DigitalState.LOW) {
-                pressCount++;
-                console.println("Button " + e.source() + " was pressed for the " + pressCount + "th time");
-            }
-        });
+    private DigitalOutput createLED(Context pi4j) {
+        var ledConfig = DigitalOutput.newConfigBuilder(pi4j)
+                .id("led")
+                .name("LED Flasher")
+                .address(PIN_LED)
+                .shutdown(DigitalState.LOW)
+                .initial(DigitalState.LOW)
+                .provider("pigpio-digital-output");
+        return pi4j.create(ledConfig);
+    }
 
-        while (true) {
-
-
-            while (pressCount < 3) {
-
-            }
-
-
-            int counter = 0;
-            while (counter < 5) {
-                if (led.equals(DigitalState.HIGH)) {
-                    led.low();
-                    System.out.println("counter: " + counter + ", low");
-                } else {
-                    led.high();
-                    System.out.println("counter: " + counter + ", high");
-                }
-                Thread.sleep(500);
-                counter++;
-            }
-            pressCount = 0;
-        }
+    private void describePlatform(Context pi4j) {
+        Platforms platforms = pi4j.platforms();
+        console.box("Pi4J PLATFORMS");
+        console.println();
+        platforms.describe().print(System.out);
+        console.println();
     }
 }
